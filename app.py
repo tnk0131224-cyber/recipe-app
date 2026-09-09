@@ -26,8 +26,17 @@ sheet_url = st.sidebar.text_input(
 # --- Google Sheets 接続関数 ---
 @st.cache_resource
 def init_gspread():
-    # 同一フォルダにある service_account.json を読み込む
-    return gspread.service_account(filename="service_account.json")
+    # Streamlit CloudのSecrets（Web公開時）から読み込む場合
+    if "gcp_service_account" in st.secrets:
+        secret_val = st.secrets["gcp_service_account"]
+        if isinstance(secret_val, str):
+            creds_dict = json.loads(secret_val)
+        else:
+            creds_dict = dict(secret_val)
+        return gspread.service_account_from_dict(creds_dict)
+    # パソコン（ローカル環境）の service_account.json から読み込む場合
+    else:
+        return gspread.service_account(filename="service_account.json")
 
 
 # 必須入力チェック
