@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="思考ゼロ！献立＆買い物アプリ", page_icon="🍳", layout="wide"
 )
 
-# --- チェックボックスとアコーディオンを完全に横並びにするCSS ＆ デザイン調整 ---
+# --- 画面の見た目を整えるCSS ---
 st.markdown(
     """
     <style>
@@ -26,33 +26,12 @@ st.markdown(
         max-width: 100% !important;
     }
     
-    /* 1行を「チェックボックス」と「アコーディオン」で横並びにするコンテナ */
-    .recipe-row-container {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        margin-bottom: 8px;
-        width: 100%;
-    }
-    
-    /* チェックボックス部分（少し下を下げてアコーディオンのタイトルと高さを合わせる） */
-    .recipe-checkbox-col {
-        padding-top: 10px;
-        flex-shrink: 0;
-    }
-    
-    /* アコーディオン部分を残り幅いっぱいに広げる */
-    .recipe-expand-col {
-        flex-grow: 1;
-        min-width: 0;
-    }
-
-    /* アコーディオン自体のダーク調スタイル・視認性改善 */
+    /* アコーディオンの背景と文字色を視認性の高いダーク調に修正 */
     div[data-testid="stExpander"] {
         border: 1px solid #4a5568 !important;
         border-radius: 8px !important;
         background-color: #1e293b !important;
-        margin-bottom: 0px !important;
+        margin-bottom: 8px !important;
     }
     div[data-testid="stExpander"] summary p {
         font-size: 13px !important;
@@ -178,7 +157,7 @@ with tab1:
 
                 try:
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash", contents=contents
+                        model="gemini-3.6-flash", contents=contents
                     )
                     res_text = response.text
 
@@ -303,7 +282,8 @@ with tab2:
             or not str(r.get("分類", "")).startswith("メイン")
         ]
 
-        # 1行描画用関数（HTMLのFlexboxを使ってチェックボックスとアコーディオンを完全に横並びにする）
+
+        # 1行描画用関数
         def render_recipe_row(rec):
             i = rec["_orig_idx"]
             row_num = rec["_row_num"]
@@ -318,28 +298,16 @@ with tab2:
             url = str(rec.get("URL", "")).strip()
             has_link_mark = " 🔗" if url else ""
 
-            # HTMLラッパーで横並びを構成
-            st.markdown(
-                f'<div class="recipe-row-container"><div class="recipe-checkbox-col" id="cb-slot-{i}"></div><div class="recipe-expand-col" id="exp-slot-{i}"></div></div>',
-                unsafe_allow_html=True,
-            )
+            col_c, col_a = st.columns([0.08, 0.92])
 
-            # チェックボックス部分の配置
-            with st.container():
-                # プレースホルダーの代わりにコンテナ内で処理するため仮想的に紐付け
-                pass
-
-            # 指定のスロットに対応するコンポーネントを差し込むため、Streamlitの通常構文で描画
-            # （※HTMLコンテナ内への直接埋め込みができないため、CSSのflexboxで並んだ同階層の要素としてレンダリング）
-            col1, col2 = st.columns([0.08, 0.92])
-            with col1:
+            with col_c:
                 is_selected = st.checkbox(
                     "選択", key=f"select_{i}", label_visibility="collapsed"
                 )
                 if is_selected:
                     selected_recipes.append(rec)
 
-            with col2:
+            with col_a:
                 badge = "✅ " if is_selected else ""
                 label_text = f"{badge}{eval_icon}{cat_tag}{name}{has_link_mark}"
 
@@ -441,6 +409,7 @@ with tab2:
                                 st.success("削除しました！")
                                 st.rerun()
 
+
         # --- メイン料理セクション ---
         if main_list:
             with st.expander(
@@ -504,8 +473,9 @@ with tab2:
                     """
 
                     try:
+                        # ★ ここを最新モデル名に修正しました
                         response = client.models.generate_content(
-                            model="gemini-2.5-flash", contents=prompt
+                            model="gemini-3.6-flash", contents=prompt
                         )
                         lines = response.text.strip().split("\n")
 
