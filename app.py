@@ -176,7 +176,13 @@ with tab1:
 # タブ2：ライブラリから選択 ＆ 買い物リスト出力
 # ==========================================
 with tab2:
-    st.subheader("今週作るレシピを選んで買い物リストを作成")
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.subheader("今週作るレシピを選んで買い物リストを作成")
+    with header_col2:
+        st.link_button(
+            "📊 スプレッドシートを開く", sheet_url, use_container_width=True
+        )
 
     try:
         records = ws_library.get_all_records()
@@ -189,13 +195,18 @@ with tab2:
             "まだライブラリにレシピが登録されていません。タブ1から登録してください。"
         )
     else:
-        st.write(
-            "▼ 作りたいレシピの「この献立を今週作る！」にチェックを入れてください"
-        )
-
+        # --- 選択中レシピの動的保持 ---
         selected_recipes = []
 
+        # プレースホルダーで「今週作る献立サマリー」を最上部に表示
+        summary_placeholder = st.empty()
+
+        st.markdown("---")
+        st.write("▼ 今週作りたい献立にチェックを入れてください")
+
         for i, rec in enumerate(records):
+            row_num = i + 2  # スプレッドシートの行番号（ヘッダーがあるため+2）
+
             eval_icon = (
                 "⭐"
                 if rec.get("評価") == "おいしかった！"
@@ -203,25 +214,150 @@ with tab2:
             )
             cat_tag = f"【{rec.get('分類', 'その他')}】"
             name = rec.get("レシピ名", f"レシピ{i+1}")
+            url = str(rec.get("URL", "")).strip()
 
-            label = f"{eval_icon} {cat_tag} {name}"
+            # --- 一覧表示のレイアウト（1行の中に「チェック」「名前」「元ページリンク」を配置） ---
+            col_chk, col_info, col_link = st.columns([2, 5, 2])
 
-            with st.expander(label):
-                url = rec.get("URL", "").strip()
-                if url:
-                    st.markdown(f"🔗 [レシピ元ページを見る]({url})")
-
-                st.write(f"**材料:**\n{rec.get('材料', '')}")
-                st.write(f"**手順:**\n{rec.get('手順', '')}")
-                if st.checkbox("この献立を今週作る！", key=f"select_{i}"):
+            with col_chk:
+                is_selected = st.checkbox(
+                    "今週作る！", key=f"select_{i}"
+                )
+                if is_selected:
                     selected_recipes.append(rec)
 
-        st.markdown("---")
+            with col_info:
+                badge = "✅ **[今週作る]** " if is_selected else ""
+                st.markdown(f"{badge}{eval_icon} {cat_tag} **{name}**")
 
-        if st.button(
-            "🛒 選んだ献立から「買い物リスト」をスプレッドシートに出力",
-            type="primary",
-        ):
+            with col_link:
+                if url:
+                    st.link_button(
+                        "🔗 元ページ", url, use_container_width=True
+                    )
+
+            # --- 詳細 ＆ アプリ内編集機能（アコーディオン） ---
+            with st.expander(f"📖 『{name}』の材料・手順・編集"):
+                edit_tab1, edit_tab2 = st.tabs(["👀 内容確認", "✏️ アプリで修正・削除"])
+
+                with edit_tab1:
+                    st.write(f"**材料:**\n{rec.get('材料', '')}")
+                    st.write(f"**手順:**\n{rec.get('手順', '')}")
+
+                with edit_tab2:
+                    st.caption(
+                        "※ここで修正して「保存」を押すとスプレッドシート側も更新されます。"
+                    )
+                    new_title = st.text_input(
+                        "レシピ名", value=name, key=f"edit_title_{i}"
+                    )
+
+                    categories = [
+                        "メイン・肉",
+                        "メイン・魚",
+                        "メイン・麺",
+                        "メイン・その他",
+                        "サブ",
+                    ]
+                    current_cat_idx = (
+                        categories.index(rec.get("分類"))
+                        if rec.get("分類") in categories
+                        else 0
+                    )
+                    new_cat = st.selectbox(
+                        "分類",
+                        categories,
+                        index=current_cat_idx,
+                        key=f"edit_cat_{i}",
+                    )
+
+                    ratings = ["いまいち", "普通", "おいしかった！"]
+                    current_rate_idx = (
+                        ratings.index(rec.get("評価"))
+                        if rec.get("評価") in ratings
+                        else 2
+                    )
+                    new_rate = st.selectbox(
+                        "評価",
+                        ratings,
+                        index=current_rate_idx,
+                        key=f"edit_rate_{i}",
+                    )
+
+                    new_ing = st.text_area(
+                        "材料",
+                        value=str(rec.get("材料", "")),
+                        height=100,
+                        key=f"edit_ing_{i}",
+                    )
+                    new_steps = st.text_area(
+                        "手順",
+                        value=str(rec.get("手順", "")),
+                        height=80,
+                        key=f"edit_steps_{i}",
+                    )
+                    new_url = st.text_input(
+                        "URL", value=url, key=f"edit_url_{i}"
+                    )
+
+                    btn_col1, btn_col2 = st.columns([1, 1])
+                    with btn_col1:
+                        if st.button(
+                            "💾 変更を保存", key=f"save_{i}", type="primary"
+                        ):
+                            ws_library.update(
+                                range_name=f"A{row_num}:F{row_num}",
+                                values=[
+                                    [
+                                        new_title,
+                                        new_cat,
+                                        new_rate,
+                                        new_ing,
+                                        new_steps,
+                                        new_url,
+                                    ]
+                                ],
+                            )
+                            st.success("スプレッドシートの内容を更新しました！")
+                            st.rerun()
+
+                    with btn_col2:
+                        if st.button("🗑️ レシピを削除", key=f"del_{i}"):
+                            ws_library.delete_rows(row_num)
+                            st.success("レシピを削除しました！")
+                            st.rerun()
+
+            st.markdown(
+                "<hr style='margin: 8px 0; border: 0.5px solid #eee;'>",
+                unsafe_allow_html=True,
+            )
+
+        # --- 最上部サマリーの表示更新 ---
+        with summary_placeholder.container():
+            if selected_recipes:
+                st.success(
+                    f"🛒 **今週つくる献立 ({len(selected_recipes)}件選択中):** "
+                    + " / ".join([r.get("レシピ名") for r in selected_recipes])
+                )
+            else:
+                st.info("💡 下の一覧から「今週作る！」レシピを選択してください。")
+
+        st.markdown("### 🛒 買い物リストの出力")
+
+        action_col1, action_col2 = st.columns([2, 1])
+
+        with action_col1:
+            btn_create = st.button(
+                "🛒 選んだ献立から「買い物リスト」を出力",
+                type="primary",
+                use_container_width=True,
+            )
+        with action_col2:
+            st.link_button(
+                "📊 スプレッドシートを開く", sheet_url, use_container_width=True
+            )
+
+        if btn_create:
             if not selected_recipes:
                 st.warning("レシピが選択されていません。")
             else:
