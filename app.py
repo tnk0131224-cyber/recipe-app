@@ -10,27 +10,42 @@ st.set_page_config(
     page_title="思考ゼロ！献立＆買い物アプリ", page_icon="🍳", layout="wide"
 )
 
-# --- スマホ画面でも横並び（1行）を強制するCSSハック ---
+# --- スマホ画面でも完全1行（横並び）を強制する強力CSS ---
 st.markdown(
     """
     <style>
-    /* スマホ等で st.columns が縦並びになるのを防ぎ、常に横並びを維持 */
+    /* スマホでもst.columnsを強制的・確実に1行横並びにする */
     div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
         flex-direction: row !important;
+        flex-wrap: nowrap !important;
         align-items: center !important;
-        gap: 0.25rem !important;
+        gap: 2px !important;
     }
     div[data-testid="column"] {
         min-width: 0px !important;
+        flex: 1 1 auto !important;
+        padding: 0 1px !important;
     }
-    /* ボタンのパディングと文字サイズをスマホ用にコンパクト化 */
-    div[data-testid="column"] button {
-        padding: 2px 4px !important;
-        font-size: 11px !important;
+    /* ボタン・リンクをスマホサイズに超コンパクト化 */
+    div[data-testid="column"] button, div[data-testid="column"] a {
+        padding: 1px 3px !important;
+        font-size: 10px !important;
+        min-height: 28px !important;
+        line-height: 1.1 !important;
     }
-    /* チェックボックスの無駄な下余白をカット */
+    /* チェックボックスの余白カット */
     div[data-testid="stCheckbox"] {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    /* テキストが溢れたら自動で「...」にして絶対に改行させない */
+    .stMarkdown p {
+        font-size: 12px !important;
         margin-bottom: 0px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     </style>
 """,
@@ -42,7 +57,6 @@ st.title("🍳 思考ゼロ！献立＆買い物リスト連携アプリ")
 # --- 1. サイドバー設定 ---
 st.sidebar.header("⚙️ アプリの設定")
 
-# Secretsから自動取得（設定がなければ空文字）
 default_api_key = st.secrets.get("GEMINI_API_KEY", "")
 default_sheet_url = st.secrets.get("SPREADSHEET_URL", "")
 
@@ -62,7 +76,6 @@ sheet_url = st.sidebar.text_input(
 # --- Google Sheets 接続関数 ---
 @st.cache_resource
 def init_gspread():
-    # Streamlit CloudのSecrets（Web公開時）から読み込む場合
     if "gcp_service_account" in st.secrets:
         secret_val = st.secrets["gcp_service_account"]
         if isinstance(secret_val, str):
@@ -70,12 +83,10 @@ def init_gspread():
         else:
             creds_dict = dict(secret_val)
         return gspread.service_account_from_dict(creds_dict)
-    # パソコン（ローカル環境）の service_account.json から読み込む場合
     else:
         return gspread.service_account(filename="service_account.json")
 
 
-# 必須入力チェック
 if not api_key or not sheet_url:
     st.info(
         "👈 左側のサイドバーに「Gemini API Key」と「スプレッドシートURL」を入力してください。"
@@ -162,7 +173,6 @@ with tab1:
                     )
                     res_text = response.text
 
-                    # 正規表現で各要素を抽出
                     title_m = re.search(r"レシピ名:\s*(.*)", res_text)
                     title = (
                         title_m.group(1).strip() if title_m else "新しいレシピ"
@@ -178,7 +188,6 @@ with tab1:
                     steps_m = re.search(r"手順:\s*([\s\S]*)", res_text)
                     steps = steps_m.group(1).strip() if steps_m else ""
 
-                    # スプレッドシート「献立ライブラリ」の末尾に追加
                     ws_library.append_row(
                         [
                             title,
@@ -222,14 +231,81 @@ with tab2:
         )
     else:
         selected_recipes = []
-
-        # プレースホルダーで「今週作る献立サマリー」を最上部に表示
         summary_placeholder = st.empty()
 
         st.markdown("---")
 
-        for i, rec in enumerate(records):
-            row_num = i + 2  # スプレッドシートの行番号
+        # --- 絞り込み ＆ ソート（並び替え）コントロール ---
+        ctrl_col1, ctrl_col2 = st.columns([1, 1])
+        with ctrl_col1:
+            filter_cat = st.selectbox(
+                "🔍 分類で絞り込み",
+                [
+                    "すべて表示",
+                    "メイン・肉",
+                    "メイン・魚",
+                    "メイン・麺",
+                    "メイン・その他",
+                    "サブ",
+                ],
+            )
+        with ctrl_col2:
+            sort_option = st.selectbox(
+                "⇅ 並び替え（ソート）",
+                [
+                    "分類順（肉→魚→麺...）",
+                    "評価が高い順",
+                    "登録順（新しい順）",
+                ],
+            )
+
+        # データの整理とID付与
+        processed_records = []
+        for idx, rec in enumerate(records):
+            item = dict(rec)
+            item["_orig_idx"] = idx
+            item["_row_num"] = idx + 2
+            if filter_cat == "すべて表示" or item.get("分類") == filter_cat:
+                processed_records.append(item)
+
+        # ソート処理
+        cat_order = {
+            "メイン・肉": 1,
+            "メイン・魚": 2,
+            "メイン・麺": 3,
+            "メイン・その他": 4,
+            "サブ": 5,
+        }
+        rate_order = {"おいしかった！": 1, "普通": 2, "いまいち": 3}
+
+        if sort_option == "分類順（肉→魚→麺...）":
+            processed_records.sort(
+                key=lambda x: cat_order.get(x.get("分類", ""), 99)
+            )
+        elif sort_option == "評価が高い順":
+            processed_records.sort(
+                key=lambda x: rate_order.get(x.get("評価", ""), 99)
+            )
+        elif sort_option == "登録順（新しい順）":
+            processed_records.reverse()
+
+        # メインとサブに分離
+        main_list = [
+            r
+            for r in processed_records
+            if str(r.get("分類", "")).startswith("メイン")
+        ]
+        sub_list = [
+            r
+            for r in processed_records
+            if r.get("分類") == "サブ"
+            or not str(r.get("分類", "")).startswith("メイン")
+        ]
+
+        # 1行描画用共通関数
+        def render_recipe_row(rec):
+            i = rec["_orig_idx"]
+            row_num = rec["_row_num"]
 
             eval_icon = (
                 "⭐"
@@ -240,9 +316,8 @@ with tab2:
             name = rec.get("レシピ名", f"レシピ{i+1}")
             url = str(rec.get("URL", "")).strip()
 
-            # --- スマホでも完全1行に納める比率調整 ---
             col_chk, col_info, col_link, col_detail = st.columns(
-                [0.7, 4.8, 2.2, 2.3]
+                [0.7, 5.1, 2.1, 2.1]
             )
 
             with col_chk:
@@ -265,7 +340,6 @@ with tab2:
                     st.write("")
 
             with col_detail:
-                # ポップオーバー形式で詳細表示
                 with st.popover("📖 詳細", use_container_width=True):
                     edit_tab1, edit_tab2 = st.tabs(
                         ["👀 内容確認", "✏️ 修正・削除"]
@@ -276,9 +350,7 @@ with tab2:
                         st.write(f"**手順:**\n{rec.get('手順', '')}")
 
                     with edit_tab2:
-                        st.caption(
-                            "※修正して「保存」を押すとスプレッドシートも更新されます。"
-                        )
+                        st.caption("※修正して「保存」でスプレッドシートも更新")
                         new_title = st.text_input(
                             "レシピ名", value=name, key=f"edit_title_{i}"
                         )
@@ -359,11 +431,27 @@ with tab2:
                                 st.rerun()
 
             st.markdown(
-                "<hr style='margin: 2px 0; border: 0.5px solid #f0f0f0;'>",
+                "<hr style='margin: 1px 0; border: 0.5px solid #f0f0f0;'>",
                 unsafe_allow_html=True,
             )
 
-        # --- 最上部サマリーの表示更新 ---
+        # --- メイン料理エリア（折りたたみ） ---
+        if main_list:
+            with st.expander(
+                f"🍖 **メイン料理** ({len(main_list)}件)", expanded=True
+            ):
+                for rec in main_list:
+                    render_recipe_row(rec)
+
+        # --- サブ料理エリア（折りたたみ） ---
+        if sub_list:
+            with st.expander(
+                f"🥗 **サブ料理** ({len(sub_list)}件)", expanded=True
+            ):
+                for rec in sub_list:
+                    render_recipe_row(rec)
+
+        # --- サマリー更新 ---
         with summary_placeholder.container():
             if selected_recipes:
                 st.success(
@@ -371,7 +459,7 @@ with tab2:
                     + " / ".join([r.get("レシピ名") for r in selected_recipes])
                 )
             else:
-                st.info("💡 チェックボックスを選択すると献立が決まります。")
+                st.info("💡 左端のボックスにチェックを入れると献立が決まります。")
 
         st.markdown("### 🛒 買い物リストの出力")
 
@@ -432,7 +520,6 @@ with tab2:
                                     [False, cat_name, item_name]
                                 )
 
-                        # --- 売り場順の並び替え（ソート） ---
                         category_order = [
                             "野菜・果物",
                             "肉・魚",
@@ -449,7 +536,6 @@ with tab2:
 
                         rows_to_add.sort(key=get_sort_key)
 
-                        # --- スプレッドシート更新（フォーマット保持のためデータ行のみクリア） ---
                         ws_shopping.batch_clear(["A2:C1000"])
 
                         if rows_to_add:
