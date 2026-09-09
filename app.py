@@ -1,8 +1,8 @@
 import json
 import re
-from PIL import Image
-import gspread
 from google import genai
+import gspread
+from PIL import Image
 import streamlit as st
 
 # 画面全体のタイトル設定
@@ -20,7 +20,10 @@ default_api_key = st.secrets.get("GEMINI_API_KEY", "")
 default_sheet_url = st.secrets.get("SPREADSHEET_URL", "")
 
 api_key = st.sidebar.text_input(
-    "Gemini API Key", value=default_api_key, type="password", help="Google AI Studioで取得したAPIキー"
+    "Gemini API Key",
+    value=default_api_key,
+    type="password",
+    help="Google AI Studioで取得したAPIキー",
 )
 sheet_url = st.sidebar.text_input(
     "スプレッドシートのURL",
@@ -92,9 +95,10 @@ with tab1:
         )
 
     with col2:
+        # ご要望の分類項目に変更
         category = st.selectbox(
             "分類（カテゴリー）",
-            ["レンジだけ", "フライパン1つ", "包丁いらず", "作り置き・時短", "その他"],
+            ["メイン・肉", "メイン・魚", "メイン・麺", "メイン・その他", "サブ"],
         )
         rating = st.select_slider(
             "家族の評判・評価",
@@ -130,7 +134,9 @@ with tab1:
 
                     # 正規表現で各要素を抽出
                     title_m = re.search(r"レシピ名:\s*(.*)", res_text)
-                    title = title_m.group(1).strip() if title_m else "新しいレシピ"
+                    title = (
+                        title_m.group(1).strip() if title_m else "新しいレシピ"
+                    )
 
                     ing_m = re.search(
                         r"材料:\s*([\s\S]*?)(?=手順:|$)", res_text
@@ -143,7 +149,6 @@ with tab1:
                     steps = steps_m.group(1).strip() if steps_m else ""
 
                     # スプレッドシート「献立ライブラリ」の末尾に追加
-                    # 列構成: A:レシピ名, B:分類, C:評価, D:材料, E:手順
                     ws_library.append_row(
                         [title, category, rating, ingredients, steps]
                     )
@@ -173,7 +178,9 @@ with tab2:
             "まだライブラリにレシピが登録されていません。タブ1から登録してください。"
         )
     else:
-        st.write("▼ 作りたいレシピの「この献立を今週作る！」にチェックを入れてください")
+        st.write(
+            "▼ 作りたいレシピの「この献立を今週作る！」にチェックを入れてください"
+        )
 
         selected_recipes = []
 
@@ -232,11 +239,6 @@ with tab2:
                         )
                         lines = response.text.strip().split("\n")
 
-                        # 買い物リストシートを一旦全クリア
-                        ws_shopping.clear()
-                        # 1行目にヘッダーを書き込み
-                        ws_shopping.append_row(["チェック", "売り場", "品目"])
-
                         rows_to_add = []
                         for line in lines:
                             line = line.strip().replace("`", "")
@@ -244,8 +246,29 @@ with tab2:
                                 parts = line.split(",", 1)
                                 cat_name = parts[0].strip()
                                 item_name = parts[1].strip()
-                                # A列: False (チェックボックス用), B列: 売り場, C列: 品目
-                                rows_to_add.append([False, cat_name, item_name])
+                                rows_to_add.append(
+                                    [False, cat_name, item_name]
+                                )
+
+                        # --- 売り場順の並び替え（ソート） ---
+                        category_order = [
+                            "野菜・果物",
+                            "肉・魚",
+                            "豆腐・納豆・加工食品",
+                            "調味料・乾物・その他",
+                        ]
+
+                        def get_sort_key(row):
+                            cat = row[1]
+                            for idx, order_name in enumerate(category_order):
+                                if order_name in cat:
+                                    return idx
+                            return len(category_order)
+
+                        rows_to_add.sort(key=get_sort_key)
+
+                        # --- スプレッドシート更新（フォーマット保持のためデータ行のみクリア） ---
+                        ws_shopping.batch_clear(["A2:C1000"])
 
                         if rows_to_add:
                             ws_shopping.append_rows(rows_to_add)
