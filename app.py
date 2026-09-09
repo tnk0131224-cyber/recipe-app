@@ -473,7 +473,6 @@ with tab2:
                     """
 
                     try:
-                        # ★ ここを最新モデル名に修正しました
                         response = client.models.generate_content(
                             model="gemini-3.6-flash", contents=prompt
                         )
@@ -486,6 +485,7 @@ with tab2:
                                 parts = line.split(",", 1)
                                 cat_name = parts[0].strip()
                                 item_name = parts[1].strip()
+                                # Pythonのブール値（False）として渡すことでスプレッドシートがチェックボックスとして認識する
                                 rows_to_add.append(
                                     [False, cat_name, item_name]
                                 )
@@ -509,7 +509,10 @@ with tab2:
                         ws_shopping.batch_clear(["A2:C1000"])
 
                         if rows_to_add:
-                            ws_shopping.append_rows(rows_to_add)
+                            # value_input_option='USER_ENTERED' を指定してBooleanを確実にチェックボックスとして反映させる
+                            ws_shopping.append_rows(
+                                rows_to_add, value_input_option="USER_ENTERED"
+                            )
                             st.success(
                                 "🎉 スプレッドシートの「買い物リスト」を更新しました！"
                             )
