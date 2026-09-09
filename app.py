@@ -90,12 +90,15 @@ with tab1:
         )
         recipe_text = st.text_area(
             "またはテキスト/メモを貼り付け",
-            height=120,
+            height=100,
             placeholder="キャプション文面などをコピペ",
+        )
+        recipe_url = st.text_input(
+            "レシピのURL（任意）",
+            placeholder="https://vt.tiktok.com/... や https://instagram.com/...",
         )
 
     with col2:
-        # ご要望の分類項目に変更
         category = st.selectbox(
             "分類（カテゴリー）",
             ["メイン・肉", "メイン・魚", "メイン・麺", "メイン・その他", "サブ"],
@@ -149,8 +152,16 @@ with tab1:
                     steps = steps_m.group(1).strip() if steps_m else ""
 
                     # スプレッドシート「献立ライブラリ」の末尾に追加
+                    # 列構成: A:レシピ名, B:分類, C:評価, D:材料, E:手順, F:URL
                     ws_library.append_row(
-                        [title, category, rating, ingredients, steps]
+                        [
+                            title,
+                            category,
+                            rating,
+                            ingredients,
+                            steps,
+                            recipe_url.strip(),
+                        ]
                     )
 
                     st.success(
@@ -196,6 +207,10 @@ with tab2:
             label = f"{eval_icon} {cat_tag} {name}"
 
             with st.expander(label):
+                url = rec.get("URL", "").strip()
+                if url:
+                    st.markdown(f"🔗 [レシピ元ページを見る]({url})")
+
                 st.write(f"**材料:**\n{rec.get('材料', '')}")
                 st.write(f"**手順:**\n{rec.get('手順', '')}")
                 if st.checkbox("この献立を今週作る！", key=f"select_{i}"):
