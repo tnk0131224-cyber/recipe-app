@@ -124,7 +124,7 @@ with tab1:
 
                 try:
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash", contents=contents
+                        model="gemini-3.6-flash", contents=contents
                     )
                     res_text = response.text
 
@@ -228,7 +228,7 @@ with tab2:
 
                     try:
                         response = client.models.generate_content(
-                            model="gemini-2.0-flash", contents=prompt
+                            model="gemini-3.6-flash", contents=prompt
                         )
                         lines = response.text.strip().split("\n")
 
