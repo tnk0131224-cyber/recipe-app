@@ -453,7 +453,7 @@ with tab2:
                     combined_ingredients = "\n".join(
                         [
                             f"■ {r.get('レシピ名')}\n{r.get('材料')}"
-                            for r in selected_recipes
+                            for r in selected_rows := selected_recipes
                         ]
                     )
 
@@ -485,7 +485,6 @@ with tab2:
                                 parts = line.split(",", 1)
                                 cat_name = parts[0].strip()
                                 item_name = parts[1].strip()
-                                # A列を触らないため、B列(分類)とC列(品目)の2つのデータだけをリストにする
                                 rows_to_add.append([cat_name, item_name])
 
                         category_order = [
@@ -496,7 +495,7 @@ with tab2:
                         ]
 
                         def get_sort_key(row):
-                            cat = row[0]  # 先頭要素がB列（分類）になる
+                            cat = row[0]
                             for idx, order_name in enumerate(category_order):
                                 if order_name in cat:
                                     return idx
@@ -504,15 +503,26 @@ with tab2:
 
                         rows_to_add.sort(key=get_sort_key)
 
-                        # A列はそのまま残すため、B列とC列（B2:C1000）だけをクリア＆書き込みする
+                        # B2:C1000 を綺麗にしてから書き込み
                         ws_shopping.batch_clear(["B2:C1000"])
 
                         if rows_to_add:
+                            # 1. まずB・C列に新しい品目を流し込む
                             ws_shopping.append_rows(
                                 rows_to_add, table_range="B2"
                             )
+
+                            # 2. 追加された行数に合わせて、A列（チェックボックス）の既存のチェックをすべて「False（未チェック）」で一括リセットする
+                            num_rows = len(rows_to_add)
+                            false_values = [[False] for _ in range(num_rows)]
+                            ws_shopping.update(
+                                range_name=f"A2:A{2 + num_rows - 1}",
+                                values=false_values,
+                                value_input_option="USER_ENTERED",
+                            )
+
                             st.success(
-                                "🎉 スプレッドシートの「買い物リスト」を更新しました！"
+                                "🎉 スプレッドシートの「買い物リスト」を更新しました！（チェックも自動リセットされました）"
                             )
                             st.info(
                                 "📱 スマホでGoogleスプレッドシートアプリを開いて買い物へGO！"
