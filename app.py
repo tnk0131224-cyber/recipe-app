@@ -14,11 +14,17 @@ st.title("🍳 思考ゼロ！献立＆買い物リスト連携アプリ")
 
 # --- 1. サイドバー設定 ---
 st.sidebar.header("⚙️ アプリの設定")
+
+# Secretsから自動取得（設定がなければ空文字）
+default_api_key = st.secrets.get("GEMINI_API_KEY", "")
+default_sheet_url = st.secrets.get("SPREADSHEET_URL", "")
+
 api_key = st.sidebar.text_input(
-    "Gemini API Key", type="password", help="Google AI Studioで取得したAPIキー"
+    "Gemini API Key", value=default_api_key, type="password", help="Google AI Studioで取得したAPIキー"
 )
 sheet_url = st.sidebar.text_input(
     "スプレッドシートのURL",
+    value=default_sheet_url,
     help="作成したスプレッドシートのブラウザURLを貼り付け",
 )
 
