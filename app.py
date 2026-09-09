@@ -485,10 +485,8 @@ with tab2:
                                 parts = line.split(",", 1)
                                 cat_name = parts[0].strip()
                                 item_name = parts[1].strip()
-                                # Pythonのブール値（False）として渡すことでスプレッドシートがチェックボックスとして認識する
-                                rows_to_add.append(
-                                    [False, cat_name, item_name]
-                                )
+                                # A列を触らないため、B列(分類)とC列(品目)の2つのデータだけをリストにする
+                                rows_to_add.append([cat_name, item_name])
 
                         category_order = [
                             "野菜・果物",
@@ -498,7 +496,7 @@ with tab2:
                         ]
 
                         def get_sort_key(row):
-                            cat = row[1]
+                            cat = row[0]  # 先頭要素がB列（分類）になる
                             for idx, order_name in enumerate(category_order):
                                 if order_name in cat:
                                     return idx
@@ -506,12 +504,12 @@ with tab2:
 
                         rows_to_add.sort(key=get_sort_key)
 
-                        ws_shopping.batch_clear(["A2:C1000"])
+                        # A列はそのまま残すため、B列とC列（B2:C1000）だけをクリア＆書き込みする
+                        ws_shopping.batch_clear(["B2:C1000"])
 
                         if rows_to_add:
-                            # value_input_option='USER_ENTERED' を指定してBooleanを確実にチェックボックスとして反映させる
                             ws_shopping.append_rows(
-                                rows_to_add, value_input_option="USER_ENTERED"
+                                rows_to_add, table_range="B2"
                             )
                             st.success(
                                 "🎉 スプレッドシートの「買い物リスト」を更新しました！"
