@@ -450,10 +450,20 @@ with tab2:
                 st.warning("レシピが選択されていません。")
             else:
                 with st.spinner("売り場順の買い物リストを作成中..."):
+# 修正前（エラーが起きた書き方）
+                    # combined_ingredients = "\n".join(
+                    #     [
+                    #         f"■ {r.get('レシピ名')}\n{r.get('材料')}"
+                    #         for r in selected_rows := selected_recipes
+                    #     ]
+                    # )
+
+                    # 修正後（安全で分かりやすい書き方）
+                    selected_rows = selected_recipes
                     combined_ingredients = "\n".join(
                         [
                             f"■ {r.get('レシピ名')}\n{r.get('材料')}"
-                            for r in selected_rows := selected_recipes
+                            for r in selected_rows
                         ]
                     )
 
