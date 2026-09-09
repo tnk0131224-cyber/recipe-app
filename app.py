@@ -26,51 +26,27 @@ st.markdown(
         max-width: 100% !important;
     }
 
-    /* レシピ1行の専用カスタムレイアウト (CSS Flexbox) */
-    .recipe-row-container {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: space-between !important;
-        width: 100% !important;
-        padding: 4px 0 !important;
-        border-bottom: 1px solid #f0f0f0;
-        box-sizing: border-box !important;
-    }
-    .recipe-row-left {
-        display: flex !important;
-        align-items: center !important;
-        flex: 1 1 auto !important;
-        min-width: 0 !important; /* テキスト省略を有効化 */
-        gap: 6px !important;
-    }
-    .recipe-title-text {
-        font-size: 13px !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        color: #333;
-    }
-    
-    /* チェックボックスの余白抹消 */
+    /* チェックボックスの余白・縦位置調整 */
     div[data-testid="stCheckbox"] {
         margin: 0 !important;
-        padding: 0 !important;
-        min-width: 24px !important;
+        padding-top: 6px !important;
+        min-width: 28px !important;
     }
     div[data-testid="stCheckbox"] > label {
         padding: 0 !important;
     }
 
-    /* 詳細ボタンの幅自動調整 */
-    div[data-testid="stPopover"] {
-        margin: 0 !important;
-        padding: 0 !important;
+    /* アコーディオン（expander）をコンパクトに装飾 */
+    div[data-testid="stExpander"] {
+        margin-bottom: 4px !important;
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 6px !important;
+        background-color: #ffffff !important;
     }
-    div[data-testid="stPopover"] button {
-        padding: 2px 8px !important;
-        font-size: 11px !important;
-        min-height: 28px !important;
-        line-height: 1 !important;
+    div[data-testid="stExpander"] summary {
+        padding: 4px 8px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
     }
     </style>
 """,
@@ -247,7 +223,7 @@ with tab2:
 
         st.markdown("---")
 
-        # --- 絞り込み ＆ ソート（スマホ縦配置で横溢れ防止） ---
+        # --- 絞り込み ＆ ソート ---
         filter_cat = st.selectbox(
             "🔍 分類で絞り込み",
             [
@@ -312,7 +288,7 @@ with tab2:
             or not str(r.get("分類", "")).startswith("メイン")
         ]
 
-        # 1行描画用カスタム関数（完全スマホフィット・スクロールゼロ）
+        # 1行描画用関数（チェックボックス ＋ 料理名アコーディオン）
         def render_recipe_row(rec):
             i = rec["_orig_idx"]
             row_num = rec["_row_num"]
@@ -327,26 +303,22 @@ with tab2:
             url = str(rec.get("URL", "")).strip()
             has_link_mark = " 🔗" if url else ""
 
-            # カスタム列コンテナ (Streamlit標準columnsを使わずHTML/CSSで制御)
-            col_left, col_right = st.columns([8.5, 1.5])
+            # 横並びレイアウト（チェックボックス：1 / 料理名アコーディオン：9）
+            col_chk, col_acc = st.columns([1, 9])
 
-            with col_left:
-                c1, c2 = st.columns([1, 9])
-                with c1:
-                    is_selected = st.checkbox(
-                        "選択", key=f"select_{i}", label_visibility="collapsed"
-                    )
-                    if is_selected:
-                        selected_recipes.append(rec)
-                with c2:
-                    badge = "✅ " if is_selected else ""
-                    st.markdown(
-                        f"<div class='recipe-title-text'>{badge}{eval_icon}{cat_tag}<b>{name}</b>{has_link_mark}</div>",
-                        unsafe_allow_html=True,
-                    )
+            with col_chk:
+                is_selected = st.checkbox(
+                    "選択", key=f"select_{i}", label_visibility="collapsed"
+                )
+                if is_selected:
+                    selected_recipes.append(rec)
 
-            with col_right:
-                with st.popover("📖", use_container_width=True):
+            with col_acc:
+                badge = "✅ " if is_selected else ""
+                label_text = f"{badge}{eval_icon}{cat_tag}{name}{has_link_mark}"
+
+                # 料理名自体がアコーディオン（折りたたみ）に！
+                with st.expander(label_text, expanded=False):
                     if url:
                         st.link_button(
                             "🔗 SNSで元のレシピを見る",
@@ -356,12 +328,12 @@ with tab2:
                         st.markdown("---")
 
                     edit_tab1, edit_tab2 = st.tabs(
-                        ["👀 内容確認", "✏️ 修正・削除"]
+                        ["📖 材料・作り方", "✏️ 修正・削除"]
                     )
 
                     with edit_tab1:
-                        st.write(f"**材料:**\n{rec.get('材料', '')}")
-                        st.write(f"**手順:**\n{rec.get('手順', '')}")
+                        st.write(f"**【材料】**\n{rec.get('材料', '')}")
+                        st.write(f"**【手順】**\n{rec.get('手順', '')}")
 
                     with edit_tab2:
                         st.caption("※修正して「保存」でシート更新")
@@ -446,19 +418,15 @@ with tab2:
 
         # --- メイン料理エリア（折りたたみ） ---
         if main_list:
-            with st.expander(
-                f"🍖 **メイン料理** ({len(main_list)}件)", expanded=True
-            ):
-                for rec in main_list:
-                    render_recipe_row(rec)
+            st.markdown(f"#### 🍖 メイン料理 ({len(main_list)}件)")
+            for rec in main_list:
+                render_recipe_row(rec)
 
         # --- サブ料理エリア（折りたたみ） ---
         if sub_list:
-            with st.expander(
-                f"🥗 **サブ料理** ({len(sub_list)}件)", expanded=True
-            ):
-                for rec in sub_list:
-                    render_recipe_row(rec)
+            st.markdown(f"#### 🥗 サブ料理 ({len(sub_list)}件)")
+            for rec in sub_list:
+                render_recipe_row(rec)
 
         # --- サマリー更新 ---
         with summary_placeholder.container():
