@@ -503,16 +503,39 @@ with tab2:
 
                         rows_to_add.sort(key=get_sort_key)
 
-                        # B2:C1000 を綺麗にしてから書き込み
+# B2:C1000 を綺麗にしてから書き込み
                         ws_shopping.batch_clear(["B2:C1000"])
 
+                        # ★追加：非表示になっていた行をすべて再表示（アンハイド）する
+                        try:
+                            sheet_id = ws_shopping.id
+                            unhide_body = {
+                                "requests": [
+                                    {
+                                        "updateDimensionProperties": {
+                                            "range": {
+                                                "sheetId": sheet_id,
+                                                "dimension": "ROWS",
+                                                "startIndex": 1,  # 2行目（0始まりなので1）
+                                                "endIndex": 1000, # 1000行目まで
+                                            },
+                                            "properties": {"hiddenByUser": False},
+                                            "fields": "hiddenByUser",
+                                        }
+                                    }
+                                ]
+                            }
+                            ws_shopping.spreadsheet.batch_update(unhide_body)
+                        except Exception as e:
+                            pass # エラーでも処理を継続
+
                         if rows_to_add:
-                            # 1. まずB・C列に新しい品目を流し込む
+                            # 1. B・C列に新しい品目を流し込む
                             ws_shopping.append_rows(
                                 rows_to_add, table_range="B2"
                             )
 
-                            # 2. 追加された行数に合わせて、A列（チェックボックス）の既存のチェックをすべて「False（未チェック）」で一括リセットする
+                            # 2. A列（チェックボックス）のチェックをすべて「False（未チェック）」で一括リセットする
                             num_rows = len(rows_to_add)
                             false_values = [[False] for _ in range(num_rows)]
                             ws_shopping.update(
@@ -522,7 +545,7 @@ with tab2:
                             )
 
                             st.success(
-                                "🎉 スプレッドシートの「買い物リスト」を更新しました！（チェックも自動リセットされました）"
+                                "🎉 スプレッドシートの「買い物リスト」を更新しました！（チェックと非表示もリセットされました）"
                             )
                             st.info(
                                 "📱 スマホでGoogleスプレッドシートアプリを開いて買い物へGO！"
