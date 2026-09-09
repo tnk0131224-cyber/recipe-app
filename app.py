@@ -1,524 +1,190 @@
-import json
-import re
-from google import genai
-import gspread
-from PIL import Image
-import streamlit as st
-
-# 画面全体のタイトル設定
-st.set_page_config(
-    page_title="思考ゼロ！献立＆買い物アプリ", page_icon="🍳", layout="wide"
-)
-
-# --- スマホ画面に完全最適化する強固なCSS ---
-st.markdown(
-    """
-    <style>
-    /* 画面全体の余白を限界まで削り、横スクロールを絶対禁止 */
-    html, body, [data-testid="stAppViewContainer"] {
-        max-width: 100vw !important;
-        overflow-x: hidden !important;
-    }
-    .main .block-container {
-        padding-left: 0.3rem !important;
-        padding-right: 0.3rem !important;
-        padding-top: 1rem !important;
-        max-width: 100% !important;
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>レシピカード</title>
+  <style>
+    /* 全体スタイル */
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      padding: 20px;
     }
 
-    /* チェックボックスの余白・縦位置調整 */
-    div[data-testid="stCheckbox"] {
-        margin: 0 !important;
-        padding-top: 6px !important;
-        min-width: 28px !important;
+    .recipe-card {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      border: 1px solid #e1e8ed;
     }
-    div[data-testid="stCheckbox"] > label {
-        padding: 0 !important;
+
+    .card-header {
+      background-color: #2c3e50;
+      color: #ffffff;
+      padding: 16px 20px;
+      font-size: 1.2rem;
+      font-weight: bold;
     }
 
-    /* アコーディオン（expander）をコンパクトに装飾 */
-    div[data-testid="stExpander"] {
-        margin-bottom: 4px !important;
-        border: 1px solid #e0e0e0 !important;
-        border-radius: 6px !important;
-        background-color: #ffffff !important;
+    .card-body {
+      padding: 16px 20px;
     }
-    div[data-testid="stExpander"] summary {
-        padding: 4px 8px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
+
+    /* アコーディオン共通スタイル */
+    details {
+      border: 1px solid #dcdfe6;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      background-color: #fafafa;
+      transition: background-color 0.2s ease;
     }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
-
-st.title("🍳 思考ゼロ！献立＆買い物連携")
-
-# --- 1. サイドバー設定 ---
-st.sidebar.header("⚙️ アプリの設定")
-
-default_api_key = st.secrets.get("GEMINI_API_KEY", "")
-default_sheet_url = st.secrets.get("SPREADSHEET_URL", "")
-
-api_key = st.sidebar.text_input(
-    "Gemini API Key",
-    value=default_api_key,
-    type="password",
-    help="Google AI Studioで取得したAPIキー",
-)
-sheet_url = st.sidebar.text_input(
-    "スプレッドシートのURL",
-    value=default_sheet_url,
-    help="作成したスプレッドシートのブラウザURLを貼り付け",
-)
-
-
-# --- Google Sheets 接続関数 ---
-@st.cache_resource
-def init_gspread():
-    if "gcp_service_account" in st.secrets:
-        secret_val = st.secrets["gcp_service_account"]
-        if isinstance(secret_val, str):
-            creds_dict = json.loads(secret_val)
-        else:
-            creds_dict = dict(secret_val)
-        return gspread.service_account_from_dict(creds_dict)
-    else:
-        return gspread.service_account(filename="service_account.json")
-
-
-if not api_key or not sheet_url:
-    st.info(
-        "👈 左側のサイドバーに「Gemini API Key」と「スプレッドシートURL」を入力してください。"
-    )
-    st.stop()
-
-try:
-    client = genai.Client(api_key=api_key)
-    gc = init_gspread()
-    sh = gc.open_by_url(sheet_url)
-    ws_library = sh.worksheet("献立ライブラリ")
-    ws_shopping = sh.worksheet("買い物リスト")
-except Exception as e:
-    st.error(f"接続エラーが発生しました: {e}")
-    st.stop()
-
-# --- メイン画面（タブ切り替え） ---
-tab1, tab2 = st.tabs(
-    [
-        "📌 レシピ保存",
-        "📅 献立 ＆ 買い物リスト",
-    ]
-)
-
-# ==========================================
-# タブ1：SNSレシピのAI解析 ＆ 登録
-# ==========================================
-with tab1:
-    st.subheader("SNSレシピをAIで解析して保存")
-
-    uploaded_file = st.file_uploader(
-        "レシピの画像（スクショ）", type=["png", "jpg", "jpeg"]
-    )
-    recipe_text = st.text_area(
-        "またはテキスト/メモを貼り付け",
-        height=90,
-        placeholder="キャプション文面などをコピペ",
-    )
-    recipe_url = st.text_input(
-        "レシピのURL（任意）",
-        placeholder="https://vt.tiktok.com/... や https://instagram.com/...",
-    )
-
-    category = st.selectbox(
-        "分類（カテゴリー）",
-        ["メイン・肉", "メイン・魚", "メイン・麺", "メイン・その他", "サブ"],
-    )
-    rating = st.select_slider(
-        "家族の評判・評価",
-        options=["いまいち", "普通", "おいしかった！"],
-        value="おいしかった！",
-    )
-
-    if st.button("🚀 レシピを解析してライブラリに追加", type="primary"):
-        if not uploaded_file and not recipe_text:
-            st.warning("画像またはテキストを入力してください。")
-        else:
-            with st.spinner("AIがレシピを解析中..."):
-                prompt = """
-                提供された情報からレシピ情報を抽出し、以下のフォーマット厳守で出力してください。
-                余計な挨拶や記号は不要です。
-
-                レシピ名: (料理名)
-                材料: (材料と分量を改行区切りで)
-                手順: (超簡略化した3ステップ以内の手順)
-                """
-
-                contents = [prompt]
-                if recipe_text:
-                    contents.append(f"テキスト情報:\n{recipe_text}")
-                if uploaded_file:
-                    contents.append(Image.open(uploaded_file))
-
-                try:
-                    response = client.models.generate_content(
-                        model="gemini-3.6-flash", contents=contents
-                    )
-                    res_text = response.text
-
-                    title_m = re.search(r"レシピ名:\s*(.*)", res_text)
-                    title = (
-                        title_m.group(1).strip() if title_m else "新しいレシピ"
-                    )
-
-                    ing_m = re.search(
-                        r"材料:\s*([\s\S]*?)(?=手順:|$)", res_text
-                    )
-                    ingredients = (
-                        ing_m.group(1).strip() if ing_m else res_text
-                    )
-
-                    steps_m = re.search(r"手順:\s*([\s\S]*)", res_text)
-                    steps = steps_m.group(1).strip() if steps_m else ""
-
-                    ws_library.append_row(
-                        [
-                            title,
-                            category,
-                            rating,
-                            ingredients,
-                            steps,
-                            recipe_url.strip(),
-                        ]
-                    )
-
-                    st.success(
-                        f"✅ 『{title}』を献立ライブラリに保存しました！"
-                    )
-                    st.expander("抽出結果を確認").write(res_text)
-
-                except Exception as e:
-                    st.error(f"解析エラー: {e}")
-
-# ==========================================
-# タブ2：ライブラリから選択 ＆ 買い物リスト出力
-# ==========================================
-with tab2:
-    st.link_button(
-        "📊 スプレッドシートを開く", sheet_url, use_container_width=True
-    )
-
-    try:
-        records = ws_library.get_all_records()
-    except Exception as e:
-        records = []
-        st.error(f"ライブラリの読み込み失敗: {e}")
-
-    if not records:
-        st.info("まだライブラリにレシピが登録されていません。")
-    else:
-        selected_recipes = []
-        summary_placeholder = st.empty()
-
-        st.markdown("---")
-
-        # --- 絞り込み ＆ ソート ---
-        filter_cat = st.selectbox(
-            "🔍 分類で絞り込み",
-            [
-                "すべて表示",
-                "メイン・肉",
-                "メイン・魚",
-                "メイン・麺",
-                "メイン・その他",
-                "サブ",
-            ],
-        )
-
-        sort_option = st.selectbox(
-            "⇅ 並び替え（ソート）",
-            [
-                "分類順（肉→魚→麺...）",
-                "評価が高い順",
-                "登録順（新しい順）",
-            ],
-        )
-
-        # データの整理とID付与
-        processed_records = []
-        for idx, rec in enumerate(records):
-            item = dict(rec)
-            item["_orig_idx"] = idx
-            item["_row_num"] = idx + 2
-            if filter_cat == "すべて表示" or item.get("分類") == filter_cat:
-                processed_records.append(item)
-
-        # ソート処理
-        cat_order = {
-            "メイン・肉": 1,
-            "メイン・魚": 2,
-            "メイン・麺": 3,
-            "メイン・その他": 4,
-            "サブ": 5,
-        }
-        rate_order = {"おいしかった！": 1, "普通": 2, "いまいち": 3}
-
-        if sort_option == "分類順（肉→魚→麺...）":
-            processed_records.sort(
-                key=lambda x: cat_order.get(x.get("分類", ""), 99)
-            )
-        elif sort_option == "評価が高い順":
-            processed_records.sort(
-                key=lambda x: rate_order.get(x.get("評価", ""), 99)
-            )
-        elif sort_option == "登録順（新しい順）":
-            processed_records.reverse()
-
-        # メインとサブに分離
-        main_list = [
-            r
-            for r in processed_records
-            if str(r.get("分類", "")).startswith("メイン")
-        ]
-        sub_list = [
-            r
-            for r in processed_records
-            if r.get("分類") == "サブ"
-            or not str(r.get("分類", "")).startswith("メイン")
-        ]
-
-        # 1行描画用関数（チェックボックス ＋ 料理名アコーディオン）
-        def render_recipe_row(rec):
-            i = rec["_orig_idx"]
-            row_num = rec["_row_num"]
-
-            eval_icon = (
-                "⭐"
-                if rec.get("評価") == "おいしかった！"
-                else ("🙂" if rec.get("評価") == "普通" else "🔺")
-            )
-            cat_tag = f"【{rec.get('分類', '他')}】"
-            name = rec.get("レシピ名", f"レシピ{i+1}")
-            url = str(rec.get("URL", "")).strip()
-            has_link_mark = " 🔗" if url else ""
-
-            # 横並びレイアウト（チェックボックス：1 / 料理名アコーディオン：9）
-            col_chk, col_acc = st.columns([1, 9])
-
-            with col_chk:
-                is_selected = st.checkbox(
-                    "選択", key=f"select_{i}", label_visibility="collapsed"
-                )
-                if is_selected:
-                    selected_recipes.append(rec)
-
-            with col_acc:
-                badge = "✅ " if is_selected else ""
-                label_text = f"{badge}{eval_icon}{cat_tag}{name}{has_link_mark}"
-
-                # 料理名自体がアコーディオン（折りたたみ）に！
-                with st.expander(label_text, expanded=False):
-                    if url:
-                        st.link_button(
-                            "🔗 SNSで元のレシピを見る",
-                            url,
-                            use_container_width=True,
-                        )
-                        st.markdown("---")
-
-                    edit_tab1, edit_tab2 = st.tabs(
-                        ["📖 材料・作り方", "✏️ 修正・削除"]
-                    )
-
-                    with edit_tab1:
-                        st.write(f"**【材料】**\n{rec.get('材料', '')}")
-                        st.write(f"**【手順】**\n{rec.get('手順', '')}")
-
-                    with edit_tab2:
-                        st.caption("※修正して「保存」でシート更新")
-                        new_title = st.text_input(
-                            "レシピ名", value=name, key=f"edit_title_{i}"
-                        )
-
-                        categories = [
-                            "メイン・肉",
-                            "メイン・魚",
-                            "メイン・麺",
-                            "メイン・その他",
-                            "サブ",
-                        ]
-                        current_cat_idx = (
-                            categories.index(rec.get("分類"))
-                            if rec.get("分類") in categories
-                            else 0
-                        )
-                        new_cat = st.selectbox(
-                            "分類",
-                            categories,
-                            index=current_cat_idx,
-                            key=f"edit_cat_{i}",
-                        )
-
-                        ratings = ["いまいち", "普通", "おいしかった！"]
-                        current_rate_idx = (
-                            ratings.index(rec.get("評価"))
-                            if rec.get("評価") in ratings
-                            else 2
-                        )
-                        new_rate = st.selectbox(
-                            "評価",
-                            ratings,
-                            index=current_rate_idx,
-                            key=f"edit_rate_{i}",
-                        )
-
-                        new_ing = st.text_area(
-                            "材料",
-                            value=str(rec.get("材料", "")),
-                            height=100,
-                            key=f"edit_ing_{i}",
-                        )
-                        new_steps = st.text_area(
-                            "手順",
-                            value=str(rec.get("手順", "")),
-                            height=80,
-                            key=f"edit_steps_{i}",
-                        )
-                        new_url = st.text_input(
-                            "URL", value=url, key=f"edit_url_{i}"
-                        )
-
-                        btn_col1, btn_col2 = st.columns([1, 1])
-                        with btn_col1:
-                            if st.button(
-                                "💾 保存", key=f"save_{i}", type="primary"
-                            ):
-                                ws_library.update(
-                                    range_name=f"A{row_num}:F{row_num}",
-                                    values=[
-                                        [
-                                            new_title,
-                                            new_cat,
-                                            new_rate,
-                                            new_ing,
-                                            new_steps,
-                                            new_url,
-                                        ]
-                                    ],
-                                )
-                                st.success("更新しました！")
-                                st.rerun()
-
-                        with btn_col2:
-                            if st.button("🗑️ 削除", key=f"del_{i}"):
-                                ws_library.delete_rows(row_num)
-                                st.success("削除しました！")
-                                st.rerun()
-
-        # --- メイン料理エリア（折りたたみ） ---
-        if main_list:
-            st.markdown(f"#### 🍖 メイン料理 ({len(main_list)}件)")
-            for rec in main_list:
-                render_recipe_row(rec)
-
-        # --- サブ料理エリア（折りたたみ） ---
-        if sub_list:
-            st.markdown(f"#### 🥗 サブ料理 ({len(sub_list)}件)")
-            for rec in sub_list:
-                render_recipe_row(rec)
-
-        # --- サマリー更新 ---
-        with summary_placeholder.container():
-            if selected_recipes:
-                st.success(
-                    f"🛒 **今週の献立 ({len(selected_recipes)}件):** "
-                    + " / ".join([r.get("レシピ名") for r in selected_recipes])
-                )
-            else:
-                st.info("💡 チェックボックスで献立を選択してください。")
-
-        st.markdown("---")
-        st.subheader("🛒 買い物リスト出力")
-
-        btn_create = st.button(
-            "🛒 選んだ献立から「買い物リスト」を出力",
-            type="primary",
-            use_container_width=True,
-        )
-
-        if btn_create:
-            if not selected_recipes:
-                st.warning("レシピが選択されていません。")
-            else:
-                with st.spinner("売り場順の買い物リストを作成中..."):
-                    combined_ingredients = "\n".join(
-                        [
-                            f"■ {r.get('レシピ名')}\n{r.get('材料')}"
-                            for r in selected_recipes
-                        ]
-                    )
-
-                    prompt = f"""
-                    以下の複数レシピの材料一覧を統合し、重複食材をまとめて、スーパーで買い回りやすい「売り場順」に整理してください。
-
-                    出力形式は、CSV風（カンマ区切り、ヘッダー無し）で1行につき「売り場カテゴリ,品目と数量」を出力してください。
-
-                    売り場カテゴリ例:
-                    - 野菜・果物
-                    - 肉・魚
-                    - 豆腐・納豆・加工食品
-                    - 調味料・乾物・その他
-
-                    材料一覧:
-                    {combined_ingredients}
-                    """
-
-                    try:
-                        response = client.models.generate_content(
-                            model="gemini-3.6-flash", contents=prompt
-                        )
-                        lines = response.text.strip().split("\n")
-
-                        rows_to_add = []
-                        for line in lines:
-                            line = line.strip().replace("`", "")
-                            if "," in line:
-                                parts = line.split(",", 1)
-                                cat_name = parts[0].strip()
-                                item_name = parts[1].strip()
-                                rows_to_add.append(
-                                    [False, cat_name, item_name]
-                                )
-
-                        category_order = [
-                            "野菜・果物",
-                            "肉・魚",
-                            "豆腐・納豆・加工食品",
-                            "調味料・乾物・その他",
-                        ]
-
-                        def get_sort_key(row):
-                            cat = row[1]
-                            for idx, order_name in enumerate(category_order):
-                                if order_name in cat:
-                                    return idx
-                            return len(category_order)
-
-                        rows_to_add.sort(key=get_sort_key)
-
-                        ws_shopping.batch_clear(["A2:C1000"])
-
-                        if rows_to_add:
-                            ws_shopping.append_rows(rows_to_add)
-                            st.success(
-                                "🎉 スプレッドシートの「買い物リスト」を更新しました！"
-                            )
-                            st.info(
-                                "📱 スマホでGoogleスプレッドシートアプリを開いて買い物へGO！"
-                            )
-                        else:
-                            st.write(response.text)
-
-                    except Exception as e:
-                        st.error(f"買い物リスト生成エラー: {e}")
+
+    details[open] {
+      background-color: #ffffff;
+    }
+
+    /* 横並びレイアウト（チェックボックス + タイトル） */
+    summary {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #2c3e50;
+      user-select: none;
+      list-style: none; /* デフォルトの矢印を非表示 */
+    }
+
+    summary::-webkit-details-marker {
+      display: none; /* Chrome/Safari用矢印非表示 */
+    }
+
+    summary:hover {
+      background-color: #f0f4f8;
+    }
+
+    /* チェックボックスの配置 */
+    .recipe-checkbox {
+      width: 18px;
+      height: 18px;
+      margin-right: 12px;
+      cursor: pointer;
+      accent-color: #3498db;
+    }
+
+    /* 料理名テキスト */
+    .recipe-title {
+      flex-grow: 1;
+      font-size: 1rem;
+    }
+
+    /* サブ料理用ラベルバッジ */
+    .badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-right: 8px;
+      color: #fff;
+    }
+    .badge-main { background-color: #e67e22; }
+    .badge-sub { background-color: #27ae60; }
+
+    /* アコーディオン開閉矢印アイコン */
+    .arrow-icon {
+      font-size: 0.8rem;
+      color: #7f8c8d;
+      transition: transform 0.2s ease;
+    }
+
+    details[open] summary .arrow-icon {
+      transform: rotate(90deg);
+    }
+
+    /* アコーディオン内部コンテンツ */
+    .accordion-content {
+      padding: 12px 16px 16px 46px; /* チェックボックスの位置と揃える調整 */
+      border-top: 1px solid #eef1f6;
+      font-size: 0.9rem;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .ingredient-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="recipe-card">
+  <div class="card-header">
+    今日の献立
+  </div>
+
+  <div class="card-body">
+    
+    <!-- 主菜のアコーディオン -->
+    <details>
+      <summary>
+        <input type="checkbox" class="recipe-checkbox" id="check-main">
+        <span class="badge badge-main">主菜</span>
+        <span class="recipe-title">ハンバーグステーキ</span>
+        <span class="arrow-icon">▶</span>
+      </summary>
+      <div class="accordion-content">
+        <strong>【材料】</strong>
+        <ul class="ingredient-list">
+          <li>合挽き肉：300g</li>
+          <li>玉ねぎ：1/2個</li>
+          <li>パン粉：大さじ3</li>
+        </ul>
+      </div>
+    </details>
+
+    <!-- サブ料理1（副菜）のアコーディオン -->
+    <details>
+      <summary>
+        <input type="checkbox" class="recipe-checkbox" id="check-sub1">
+        <span class="badge badge-sub">副菜</span>
+        <span class="recipe-title">彩り野菜のグリーンサラダ</span>
+        <span class="arrow-icon">▶</span>
+      </summary>
+      <div class="accordion-content">
+        <strong>【材料】</strong>
+        <ul class="ingredient-list">
+          <li>レタス：3枚</li>
+          <li>ミニトマト：4個</li>
+          <li>ドレッシング：適量</li>
+        </ul>
+      </div>
+    </details>
+
+    <!-- サブ料理2（スープ）のアコーディオン -->
+    <details>
+      <summary>
+        <input type="checkbox" class="recipe-checkbox" id="check-sub2">
+        <span class="badge badge-sub">汁物</span>
+        <span class="recipe-title">具だくさんコンソメスープ</span>
+        <span class="arrow-icon">▶</span>
+      </summary>
+      <div class="accordion-content">
+        <strong>【材料】</strong>
+        <ul class="ingredient-list">
+          <li>コンソメ固形：1個</li>
+          <li>キャベツ：1枚</li>
+          <li>人参：1/4本</li>
+        </ul>
+      </div>
+    </details>
+
+  </div>
+</div>
+
+</body>
+</html>
