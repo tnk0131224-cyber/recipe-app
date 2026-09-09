@@ -10,6 +10,33 @@ st.set_page_config(
     page_title="思考ゼロ！献立＆買い物アプリ", page_icon="🍳", layout="wide"
 )
 
+# --- スマホ画面でも横並び（1行）を強制するCSSハック ---
+st.markdown(
+    """
+    <style>
+    /* スマホ等で st.columns が縦並びになるのを防ぎ、常に横並びを維持 */
+    div[data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.25rem !important;
+    }
+    div[data-testid="column"] {
+        min-width: 0px !important;
+    }
+    /* ボタンのパディングと文字サイズをスマホ用にコンパクト化 */
+    div[data-testid="column"] button {
+        padding: 2px 4px !important;
+        font-size: 11px !important;
+    }
+    /* チェックボックスの無駄な下余白をカット */
+    div[data-testid="stCheckbox"] {
+        margin-bottom: 0px !important;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
 st.title("🍳 思考ゼロ！献立＆買い物リスト連携アプリ")
 
 # --- 1. サイドバー設定 ---
@@ -213,31 +240,33 @@ with tab2:
             name = rec.get("レシピ名", f"レシピ{i+1}")
             url = str(rec.get("URL", "")).strip()
 
-            # --- 1行ですべて完結する横並びレイアウト ---
+            # --- スマホでも完全1行に納める比率調整 ---
             col_chk, col_info, col_link, col_detail = st.columns(
-                [0.8, 5.2, 2.0, 2.0]
+                [0.7, 4.8, 2.2, 2.3]
             )
 
             with col_chk:
                 is_selected = st.checkbox(
-                    "今週作る", key=f"select_{i}", label_visibility="collapsed"
+                    "選択", key=f"select_{i}", label_visibility="collapsed"
                 )
                 if is_selected:
                     selected_recipes.append(rec)
 
             with col_info:
                 badge = "✅ " if is_selected else ""
-                st.markdown(f"{badge}{eval_icon} {cat_tag} **{name}**")
+                st.markdown(f"{badge}{eval_icon}{cat_tag}**{name}**")
 
             with col_link:
                 if url:
                     st.link_button(
-                        "🔗 元ページ", url, use_container_width=True
+                        "🔗 リンク", url, use_container_width=True
                     )
+                else:
+                    st.write("")
 
             with col_detail:
-                # ポップオーバー（ポップアップ）形式で材料確認や修正を開く
-                with st.popover("📖 詳細/編集", use_container_width=True):
+                # ポップオーバー形式で詳細表示
+                with st.popover("📖 詳細", use_container_width=True):
                     edit_tab1, edit_tab2 = st.tabs(
                         ["👀 内容確認", "✏️ 修正・削除"]
                     )
@@ -330,7 +359,7 @@ with tab2:
                                 st.rerun()
 
             st.markdown(
-                "<hr style='margin: 4px 0; border: 0.5px solid #f0f0f0;'>",
+                "<hr style='margin: 2px 0; border: 0.5px solid #f0f0f0;'>",
                 unsafe_allow_html=True,
             )
 
@@ -342,7 +371,7 @@ with tab2:
                     + " / ".join([r.get("レシピ名") for r in selected_recipes])
                 )
             else:
-                st.info("💡 左端のボックスにチェックを入れると献立が選択されます。")
+                st.info("💡 チェックボックスを選択すると献立が決まります。")
 
         st.markdown("### 🛒 買い物リストの出力")
 
