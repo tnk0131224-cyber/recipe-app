@@ -26,17 +26,21 @@ st.markdown(
         max-width: 100% !important;
     }
     
-    /* アコーディオンの文字色・背景の視認性を改善 */
+    /* アコーディオンの背景と文字色を視認性の高いダーク調に修正 */
     div[data-testid="stExpander"] {
-        border: 1px solid #dcdfe6 !important;
+        border: 1px solid #4a5568 !important;
         border-radius: 8px !important;
-        background-color: #ffffff !important;
+        background-color: #1e293b !important;
         margin-bottom: 8px !important;
     }
     div[data-testid="stExpander"] summary p {
         font-size: 13px !important;
         font-weight: bold !important;
-        color: #2c3e50 !important;
+        color: #f8fafc !important;
+    }
+    /* アコーディオン内部のテキスト色を白に調整 */
+    div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
+        color: #f1f5f9 !important;
     }
     </style>
 """,
@@ -153,7 +157,7 @@ with tab1:
 
                 try:
                     response = client.models.generate_content(
-                        model="gemini-3.6-flash", contents=contents
+                        model="gemini-2.5-flash", contents=contents
                     )
                     res_text = response.text
 
@@ -321,8 +325,8 @@ with tab2:
                     )
 
                     with edit_tab1:
-                        st.write(f"**【材料】**\n{rec.get('材料', '')}")
-                        st.write(f"**【手順】**\n{rec.get('手順', '')}")
+                        st.markdown(f"**【材料】**\n\n{rec.get('材料', '')}")
+                        st.markdown(f"**【手順】**\n\n{rec.get('手順', '')}")
 
                     with edit_tab2:
                         st.caption("※修正して「保存」でシート更新")
@@ -465,7 +469,7 @@ with tab2:
 
                     try:
                         response = client.models.generate_content(
-                            model="gemini-3.6-flash", contents=prompt
+                            model="gemini-2.5-flash", contents=prompt
                         )
                         lines = response.text.strip().split("\n")
 
