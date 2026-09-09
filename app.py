@@ -10,57 +10,74 @@ st.set_page_config(
     page_title="思考ゼロ！献立＆買い物アプリ", page_icon="🍳", layout="wide"
 )
 
-# --- スマホ画面に完全フィットさせる強力CSS ---
+# --- スマホ画面に完全最適化する強固なCSS ---
 st.markdown(
     """
     <style>
-    /* 横スクロールを完全に防止し、余白を最適化 */
-    .main .block-container {
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-        max-width: 100% !important;
+    /* 画面全体の余白を限界まで削り、横スクロールを絶対禁止 */
+    html, body, [data-testid="stAppViewContainer"] {
+        max-width: 100vw !important;
         overflow-x: hidden !important;
     }
-    /* スマホでもst.columnsを強制的・確実に1行横並びにする */
-    div[data-testid="stHorizontalBlock"] {
+    .main .block-container {
+        padding-left: 0.3rem !important;
+        padding-right: 0.3rem !important;
+        padding-top: 1rem !important;
+        max-width: 100% !important;
+    }
+
+    /* レシピ1行の専用カスタムレイアウト (CSS Flexbox) */
+    .recipe-row-container {
         display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
         align-items: center !important;
-        gap: 4px !important;
+        justify-content: space-between !important;
         width: 100% !important;
+        padding: 4px 0 !important;
+        border-bottom: 1px solid #f0f0f0;
+        box-sizing: border-box !important;
     }
-    div[data-testid="column"] {
-        min-width: 0px !important;
-        padding: 0 !important;
+    .recipe-row-left {
+        display: flex !important;
+        align-items: center !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important; /* テキスト省略を有効化 */
+        gap: 6px !important;
     }
-    /* ポップオーバーボタンをスマホサイズにコンパクト化 */
-    div[data-testid="column"] button {
-        padding: 2px 4px !important;
-        font-size: 11px !important;
-        min-height: 32px !important;
-        line-height: 1.1 !important;
-        width: 100% !important;
-    }
-    /* チェックボックスの余白カット */
-    div[data-testid="stCheckbox"] {
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    /* テキストが溢れたら自動で「...」にしてはみ出し・改行を防止 */
-    .stMarkdown p {
-        font-size: 12px !important;
-        margin-bottom: 0px !important;
+    .recipe-title-text {
+        font-size: 13px !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
+        color: #333;
+    }
+    
+    /* チェックボックスの余白抹消 */
+    div[data-testid="stCheckbox"] {
+        margin: 0 !important;
+        padding: 0 !important;
+        min-width: 24px !important;
+    }
+    div[data-testid="stCheckbox"] > label {
+        padding: 0 !important;
+    }
+
+    /* 詳細ボタンの幅自動調整 */
+    div[data-testid="stPopover"] {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    div[data-testid="stPopover"] button {
+        padding: 2px 8px !important;
+        font-size: 11px !important;
+        min-height: 28px !important;
+        line-height: 1 !important;
     }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-st.title("🍳 思考ゼロ！献立＆買い物リスト連携アプリ")
+st.title("🍳 思考ゼロ！献立＆買い物連携")
 
 # --- 1. サイドバー設定 ---
 st.sidebar.header("⚙️ アプリの設定")
@@ -114,8 +131,8 @@ except Exception as e:
 # --- メイン画面（タブ切り替え） ---
 tab1, tab2 = st.tabs(
     [
-        "📌 1. レシピの解析・ライブラリ保存",
-        "📅 2. 献立えらび ＆ 買い物リスト作成",
+        "📌 レシピ保存",
+        "📅 献立 ＆ 買い物リスト",
     ]
 )
 
@@ -124,36 +141,29 @@ tab1, tab2 = st.tabs(
 # ==========================================
 with tab1:
     st.subheader("SNSレシピをAIで解析して保存")
-    st.caption(
-        "画像（スクショ）またはテキストを入力すると、AIが「レシピ名・材料・手順」を自動抽出します。"
+
+    uploaded_file = st.file_uploader(
+        "レシピの画像（スクショ）", type=["png", "jpg", "jpeg"]
+    )
+    recipe_text = st.text_area(
+        "またはテキスト/メモを貼り付け",
+        height=90,
+        placeholder="キャプション文面などをコピペ",
+    )
+    recipe_url = st.text_input(
+        "レシピのURL（任意）",
+        placeholder="https://vt.tiktok.com/... や https://instagram.com/...",
     )
 
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        uploaded_file = st.file_uploader(
-            "レシピの画像（スクショ）", type=["png", "jpg", "jpeg"]
-        )
-        recipe_text = st.text_area(
-            "またはテキスト/メモを貼り付け",
-            height=100,
-            placeholder="キャプション文面などをコピペ",
-        )
-        recipe_url = st.text_input(
-            "レシピのURL（任意）",
-            placeholder="https://vt.tiktok.com/... や https://instagram.com/...",
-        )
-
-    with col2:
-        category = st.selectbox(
-            "分類（カテゴリー）",
-            ["メイン・肉", "メイン・魚", "メイン・麺", "メイン・その他", "サブ"],
-        )
-        rating = st.select_slider(
-            "家族の評判・評価",
-            options=["いまいち", "普通", "おいしかった！"],
-            value="おいしかった！",
-        )
+    category = st.selectbox(
+        "分類（カテゴリー）",
+        ["メイン・肉", "メイン・魚", "メイン・麺", "メイン・その他", "サブ"],
+    )
+    rating = st.select_slider(
+        "家族の評判・評価",
+        options=["いまいち", "普通", "おいしかった！"],
+        value="おいしかった！",
+    )
 
     if st.button("🚀 レシピを解析してライブラリに追加", type="primary"):
         if not uploaded_file and not recipe_text:
@@ -219,13 +229,9 @@ with tab1:
 # タブ2：ライブラリから選択 ＆ 買い物リスト出力
 # ==========================================
 with tab2:
-    header_col1, header_col2 = st.columns([3, 1])
-    with header_col1:
-        st.subheader("今週作るレシピを選んで買い物リストを作成")
-    with header_col2:
-        st.link_button(
-            "📊 スプレッドシート", sheet_url, use_container_width=True
-        )
+    st.link_button(
+        "📊 スプレッドシートを開く", sheet_url, use_container_width=True
+    )
 
     try:
         records = ws_library.get_all_records()
@@ -234,38 +240,34 @@ with tab2:
         st.error(f"ライブラリの読み込み失敗: {e}")
 
     if not records:
-        st.info(
-            "まだライブラリにレシピが登録されていません。タブ1から登録してください。"
-        )
+        st.info("まだライブラリにレシピが登録されていません。")
     else:
         selected_recipes = []
         summary_placeholder = st.empty()
 
         st.markdown("---")
 
-        # --- 絞り込み ＆ ソート（並び替え）コントロール ---
-        ctrl_col1, ctrl_col2 = st.columns([1, 1])
-        with ctrl_col1:
-            filter_cat = st.selectbox(
-                "🔍 分類で絞り込み",
-                [
-                    "すべて表示",
-                    "メイン・肉",
-                    "メイン・魚",
-                    "メイン・麺",
-                    "メイン・その他",
-                    "サブ",
-                ],
-            )
-        with ctrl_col2:
-            sort_option = st.selectbox(
-                "⇅ 並び替え（ソート）",
-                [
-                    "分類順（肉→魚→麺...）",
-                    "評価が高い順",
-                    "登録順（新しい順）",
-                ],
-            )
+        # --- 絞り込み ＆ ソート（スマホ縦配置で横溢れ防止） ---
+        filter_cat = st.selectbox(
+            "🔍 分類で絞り込み",
+            [
+                "すべて表示",
+                "メイン・肉",
+                "メイン・魚",
+                "メイン・麺",
+                "メイン・その他",
+                "サブ",
+            ],
+        )
+
+        sort_option = st.selectbox(
+            "⇅ 並び替え（ソート）",
+            [
+                "分類順（肉→魚→麺...）",
+                "評価が高い順",
+                "登録順（新しい順）",
+            ],
+        )
 
         # データの整理とID付与
         processed_records = []
@@ -310,7 +312,7 @@ with tab2:
             or not str(r.get("分類", "")).startswith("メイン")
         ]
 
-        # 1行描画用共通関数（3列にして完全フィット）
+        # 1行描画用カスタム関数（完全スマホフィット・スクロールゼロ）
         def render_recipe_row(rec):
             i = rec["_orig_idx"]
             row_num = rec["_row_num"]
@@ -320,30 +322,31 @@ with tab2:
                 if rec.get("評価") == "おいしかった！"
                 else ("🙂" if rec.get("評価") == "普通" else "🔺")
             )
-            cat_tag = f"【{rec.get('分類', 'その他')}】"
+            cat_tag = f"【{rec.get('分類', '他')}】"
             name = rec.get("レシピ名", f"レシピ{i+1}")
             url = str(rec.get("URL", "")).strip()
+            has_link_mark = " 🔗" if url else ""
 
-            # スマホ最適化：3列構成（チェックボックス / レシピ情報 / 詳細ポップオーバー）
-            col_chk, col_info, col_detail = st.columns([0.8, 7.2, 2.0])
+            # カスタム列コンテナ (Streamlit標準columnsを使わずHTML/CSSで制御)
+            col_left, col_right = st.columns([8.5, 1.5])
 
-            with col_chk:
-                is_selected = st.checkbox(
-                    "選択", key=f"select_{i}", label_visibility="collapsed"
-                )
-                if is_selected:
-                    selected_recipes.append(rec)
+            with col_left:
+                c1, c2 = st.columns([1, 9])
+                with c1:
+                    is_selected = st.checkbox(
+                        "選択", key=f"select_{i}", label_visibility="collapsed"
+                    )
+                    if is_selected:
+                        selected_recipes.append(rec)
+                with c2:
+                    badge = "✅ " if is_selected else ""
+                    st.markdown(
+                        f"<div class='recipe-title-text'>{badge}{eval_icon}{cat_tag}<b>{name}</b>{has_link_mark}</div>",
+                        unsafe_allow_html=True,
+                    )
 
-            with col_info:
-                badge = "✅ " if is_selected else ""
-                has_link_mark = " 🔗" if url else ""
-                st.markdown(
-                    f"{badge}{eval_icon}{cat_tag}**{name}**{has_link_mark}"
-                )
-
-            with col_detail:
+            with col_right:
                 with st.popover("📖", use_container_width=True):
-                    # 外部URLがあれば一番上にリンクボタンを表示
                     if url:
                         st.link_button(
                             "🔗 SNSで元のレシピを見る",
@@ -361,7 +364,7 @@ with tab2:
                         st.write(f"**手順:**\n{rec.get('手順', '')}")
 
                     with edit_tab2:
-                        st.caption("※修正して「保存」でスプレッドシートも更新")
+                        st.caption("※修正して「保存」でシート更新")
                         new_title = st.text_input(
                             "レシピ名", value=name, key=f"edit_title_{i}"
                         )
@@ -441,11 +444,6 @@ with tab2:
                                 st.success("削除しました！")
                                 st.rerun()
 
-            st.markdown(
-                "<hr style='margin: 1px 0; border: 0.5px solid #f0f0f0;'>",
-                unsafe_allow_html=True,
-            )
-
         # --- メイン料理エリア（折りたたみ） ---
         if main_list:
             with st.expander(
@@ -466,26 +464,20 @@ with tab2:
         with summary_placeholder.container():
             if selected_recipes:
                 st.success(
-                    f"🛒 **今週つくる献立 ({len(selected_recipes)}件選択中):** "
+                    f"🛒 **今週の献立 ({len(selected_recipes)}件):** "
                     + " / ".join([r.get("レシピ名") for r in selected_recipes])
                 )
             else:
-                st.info("💡 左端のボックスにチェックを入れると献立が決まります。")
+                st.info("💡 チェックボックスで献立を選択してください。")
 
-        st.markdown("### 🛒 買い物リストの出力")
+        st.markdown("---")
+        st.subheader("🛒 買い物リスト出力")
 
-        action_col1, action_col2 = st.columns([2, 1])
-
-        with action_col1:
-            btn_create = st.button(
-                "🛒 選んだ献立から「買い物リスト」を出力",
-                type="primary",
-                use_container_width=True,
-            )
-        with action_col2:
-            st.link_button(
-                "📊 スプレッドシートを開く", sheet_url, use_container_width=True
-            )
+        btn_create = st.button(
+            "🛒 選んだ献立から「買い物リスト」を出力",
+            type="primary",
+            use_container_width=True,
+        )
 
         if btn_create:
             if not selected_recipes:
