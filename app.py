@@ -411,15 +411,19 @@ with tab2:
 
         # --- メイン料理セクション ---
         if main_list:
-            st.markdown(f"#### 🍖 メイン料理 ({len(main_list)}件)")
-            for rec in main_list:
-                render_recipe_row(rec)
+            with st.expander(
+                f"🍖 メイン料理 ({len(main_list)}件)", expanded=True
+            ):
+                for rec in main_list:
+                    render_recipe_row(rec)
 
         # --- サブ料理セクション ---
         if sub_list:
-            st.markdown(f"#### 🥗 サブ料理 ({len(sub_list)}件)")
-            for rec in sub_list:
-                render_recipe_row(rec)
+            with st.expander(
+                f"🥗 サブ料理 ({len(sub_list)}件)", expanded=True
+            ):
+                for rec in sub_list:
+                    render_recipe_row(rec)
 
         # --- サマリー更新 ---
         with summary_placeholder.container():
