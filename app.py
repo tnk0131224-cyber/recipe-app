@@ -10,36 +10,44 @@ st.set_page_config(
     page_title="思考ゼロ！献立＆買い物アプリ", page_icon="🍳", layout="wide"
 )
 
-# --- スマホ画面でも完全1行（横並び）を強制する強力CSS ---
+# --- スマホ画面に完全フィットさせる強力CSS ---
 st.markdown(
     """
     <style>
+    /* 横スクロールを完全に防止し、余白を最適化 */
+    .main .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
     /* スマホでもst.columnsを強制的・確実に1行横並びにする */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        gap: 2px !important;
+        gap: 4px !important;
+        width: 100% !important;
     }
     div[data-testid="column"] {
         min-width: 0px !important;
-        flex: 1 1 auto !important;
-        padding: 0 1px !important;
+        padding: 0 !important;
     }
-    /* ボタン・リンクをスマホサイズに超コンパクト化 */
-    div[data-testid="column"] button, div[data-testid="column"] a {
-        padding: 1px 3px !important;
-        font-size: 10px !important;
-        min-height: 28px !important;
+    /* ポップオーバーボタンをスマホサイズにコンパクト化 */
+    div[data-testid="column"] button {
+        padding: 2px 4px !important;
+        font-size: 11px !important;
+        min-height: 32px !important;
         line-height: 1.1 !important;
+        width: 100% !important;
     }
     /* チェックボックスの余白カット */
     div[data-testid="stCheckbox"] {
         margin: 0 !important;
         padding: 0 !important;
     }
-    /* テキストが溢れたら自動で「...」にして絶対に改行させない */
+    /* テキストが溢れたら自動で「...」にしてはみ出し・改行を防止 */
     .stMarkdown p {
         font-size: 12px !important;
         margin-bottom: 0px !important;
@@ -216,7 +224,7 @@ with tab2:
         st.subheader("今週作るレシピを選んで買い物リストを作成")
     with header_col2:
         st.link_button(
-            "📊 スプレッドシートを開く", sheet_url, use_container_width=True
+            "📊 スプレッドシート", sheet_url, use_container_width=True
         )
 
     try:
@@ -302,7 +310,7 @@ with tab2:
             or not str(r.get("分類", "")).startswith("メイン")
         ]
 
-        # 1行描画用共通関数
+        # 1行描画用共通関数（3列にして完全フィット）
         def render_recipe_row(rec):
             i = rec["_orig_idx"]
             row_num = rec["_row_num"]
@@ -316,9 +324,8 @@ with tab2:
             name = rec.get("レシピ名", f"レシピ{i+1}")
             url = str(rec.get("URL", "")).strip()
 
-            col_chk, col_info, col_link, col_detail = st.columns(
-                [0.7, 5.1, 2.1, 2.1]
-            )
+            # スマホ最適化：3列構成（チェックボックス / レシピ情報 / 詳細ポップオーバー）
+            col_chk, col_info, col_detail = st.columns([0.8, 7.2, 2.0])
 
             with col_chk:
                 is_selected = st.checkbox(
@@ -329,18 +336,22 @@ with tab2:
 
             with col_info:
                 badge = "✅ " if is_selected else ""
-                st.markdown(f"{badge}{eval_icon}{cat_tag}**{name}**")
-
-            with col_link:
-                if url:
-                    st.link_button(
-                        "🔗 リンク", url, use_container_width=True
-                    )
-                else:
-                    st.write("")
+                has_link_mark = " 🔗" if url else ""
+                st.markdown(
+                    f"{badge}{eval_icon}{cat_tag}**{name}**{has_link_mark}"
+                )
 
             with col_detail:
-                with st.popover("📖 詳細", use_container_width=True):
+                with st.popover("📖", use_container_width=True):
+                    # 外部URLがあれば一番上にリンクボタンを表示
+                    if url:
+                        st.link_button(
+                            "🔗 SNSで元のレシピを見る",
+                            url,
+                            use_container_width=True,
+                        )
+                        st.markdown("---")
+
                     edit_tab1, edit_tab2 = st.tabs(
                         ["👀 内容確認", "✏️ 修正・削除"]
                     )
